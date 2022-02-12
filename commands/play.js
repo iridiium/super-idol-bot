@@ -5,24 +5,37 @@ const queue = new Map();
 
 module.exports = {
 	name: 'play',
-	aliases: ['skip', 'stop', 'queue'],
-	async execute(message, args, cmd) {
+	aliases: ['skip', 'stop', 'queue', 'die', 'leave'],
+	async execute(message, args, cmd, Discord) {
+		if (!message.guild) {
+			return message.channel.send(error_embed(
+				'You cannot use this command in direct messages!', Discord,
+			));
+		}
+
 		const voice_channel = message.member.voice.channel;
 		if (!voice_channel) {
-			return message.reply(
-				'You need to be in a voice channel to execute this command!',
-			);
+			return message.channel.send(error_embed(
+				'You need to be in a voice channel to execute this command!', Discord,
+			));
 		}
 
 		const permissions = message.member.voice.channel.permissionsFor(message.client.user);
 		if (!permissions.has('CONNECT') || !permissions.has('SPEAK')) {
-			return message.reply('You don\'t have the correct permissions!');
+			return message.channel.send(error_embed(
+				'You don\'t have the correct permissions!', Discord,
+			));
 		}
 
 		const server_queue = queue.get(message.guild.id);
 
 		if (cmd == 'play') {
-			if (!args.length) return message.reply('You need to send the second argument!');
+			if (!args.length) {
+				return message.channel.send(error_embed(
+					'You need to send the second argument!', Discord,
+				));
+			}
+
 			let song = {};
 
 			if (ytdl.validateURL(args[0])) {
@@ -51,7 +64,9 @@ module.exports = {
 					};
 				}
 				else {
-					message.reply('Error finding video, ');
+					return message.channel.send(error_embed(
+						'There was an error finding the specified video.', Discord,
+					));
 				}
 			}
 
@@ -69,32 +84,43 @@ module.exports = {
 				try {
 					const connection = await voice_channel.join();
 					queue_constructor.connection = connection;
-					video_player(message.guild, queue_constructor.songs[0], queue, message);
+					video_player(message.guild, queue_constructor.songs[0], Discord);
 				}
 				catch (err) {
 					queue.delete(message.guild.id);
-					message.reply('There was an error connecting!');
-					throw err;
+					return message.channel.send(error_embed(
+						'There was an error connecting!', Discord,
+					));
 				}
 			}
 			else {
 				server_queue.songs.push(song);
-				return message.channel.send(`${song.title} added to queue!`);
+				return message.channel.send(success_embed(
+					`"${song.title}" added to queue!`, Discord,
+				));
 			}
 		}
 		else if (cmd === 'skip') {
-			skip_song(message, server_queue);
+			skip_song(message, server_queue, Discord);
 		}
-		else if (cmd === 'stop') {
-			stop_song(message, server_queue);
+		else if (cmd === 'stop' || cmd === 'die') {
+			stop_song(message, server_queue, Discord);
 		}
 		else if (cmd === 'queue') {
-			display_queue(message, server_queue);
+			display_queue(message, server_queue, Discord);
+		}
+		else if (cmd === 'leave') {
+			message.guild.me.voice.channel.leave();
+			return message.channel.send(success_embed(
+				'Leaving the voice channel!', Discord,
+			));
 		}
 	},
 };
 
-const video_player = async (guild, song) => {
+// Helper function for the play command
+
+const video_player = async (guild, song, Discord) => {
 	const song_queue = queue.get(guild.id);
 
 	if (!song) {
@@ -108,38 +134,68 @@ const video_player = async (guild, song) => {
 		song_queue.songs.shift();
 		video_player(guild, song_queue.songs[0]);
 	});
-	song_queue.text_channel.send(
-		`Now playing ${song.title} (${song.duration}) by ${song.author}`,
-	);
+	song_queue.text_channel.send(success_embed(
+		`Now playing ${song.title} (${song.duration}) by ${song.author}`, Discord,
+	));
 };
 
-const skip_song = (message, server_queue) => {
+// Other commands which require queue access
+
+const skip_song = (message, server_queue, Discord) => {
 	if (!message.member.voice.channel) {
-		return message.reply('You need to be in a channel to execute this command!');
+		return message.channel.send(error_embed(
+			'You need to be in a voice channel to execute this command!', Discord,
+		));
 	}
 	if (!server_queue) {
-		return message.reply('There are no songs in the queue!');
+		return message.channel.send(error_embed(
+			'There are no songs in the queue!', Discord,
+		));
 	}
-	server_queue.connection.dispatcher.end();
+	try {
+		server_queue.connection.dispatcher.end();
+	}
+	catch (exc) {
+		return message.channel.send(error_embed(
+			'The song you are trying to skip has no audio or is too short, so the bot cannot skip the song as it thinks that there is no song. This won\'t work with the stop command either.', Discord,
+		));
+	}
 };
 
-const stop_song = (message, server_queue) => {
+const stop_song = (message, server_queue, Discord) => {
 	if (!message.member.voice.channel) {
-		return message.channel.send('You need to be in a channel to execute this command!');
+		return message.channel.send(error_embed(
+			'You need to be in a channel to execute this command!', Discord,
+		));
 	}
 	if (!server_queue) {
-		return message.reply('There are no songs in the queue!');
+		return message.channel.send(error_embed(
+			'There are no songs in the queue!', Discord,
+		));
 	}
 
-	message.reply('Stopping all songs, leaving the channel!');
-	server_queue.connection.dispatcher.end();
+	try {
+		server_queue.connection.dispatcher.end();
+	}
+	catch (exc) {
+		return message.channel.send(error_embed(
+			'The song you are trying to skip has no audio or is too short, so the bot cannot skip the song as it thinks that there is no song. This won\'t work with the skip command either.', Discord,
+		));
+	}
+
 	server_queue.songs = [];
 	message.guild.me.voice.channel.leave();
+
+	message.channel.send(success_embed(
+		'Stopping the song, ending the queue and leaving the voice channel.', Discord,
+	));
 };
 
-const display_queue = (message, server_queue) => {
+const display_queue = (message, server_queue, Discord) => {
 	if (!server_queue) {
-		return message.reply('There are no songs in the queue!');
+		return message.channel.send(error_embed(
+			'There are no songs in the queue!', Discord,
+		));
 	}
 
 	try {
@@ -156,6 +212,32 @@ Author: ${song.author}
 		});
 	}
 	catch (err) {
-		message.reply('There are no songs coming up!');
+		message.channel.send(error_embed(
+			'There are no songs in the queue!', Discord,
+		));
 	}
+};
+
+// Embed functions
+
+const error_embed = (error, Discord) => {
+	const embed = new Discord.MessageEmbed()
+		.setColor('#b00323')
+		.setTitle('An error has occured!')
+		.setDescription(error)
+		.setTimestamp()
+		.setFooter('Made by mcmakkers#9633');
+
+	return embed;
+};
+
+const success_embed = (success, Discord) => {
+	const embed = new Discord.MessageEmbed()
+		.setColor('#f1c232')
+		.setTitle('Success!')
+		.setDescription(success)
+		.setTimestamp()
+		.setFooter('Made by mcmakkers#9633');
+
+	return embed;
 };

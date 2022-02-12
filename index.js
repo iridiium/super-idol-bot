@@ -1,14 +1,12 @@
 // Constants (Modules + secrets)
 const fs = require('fs');
 
-const {
-	Client, Collection,
-} = require('discord.js');
+const Discord = require('discord.js');
 
 const { PREFIX, token } = require('./config.json');
 
-const bot = new Client();
-bot.commands = new Collection();
+const bot = new Discord.Client();
+bot.commands = new Discord.Collection();
 
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
@@ -16,8 +14,10 @@ for (const file of commandFiles) {
 	const command = require(`./commands/${file}`);
 	bot.commands.set(command.name, command);
 
-	for (const alias of command.aliases) {
-		bot.commands.set(alias, command);
+	if (command.aliases) {
+		for (const alias of command.aliases) {
+			bot.commands.set(alias, command);
+		}
 	}
 }
 
@@ -43,7 +43,7 @@ bot.on('message', async message => {
 	if (!command) return;
 
 	try {
-		bot.commands.get(commandName).execute(message, args, commandName);
+		bot.commands.get(commandName).execute(message, args, commandName, Discord);
 	}
 	catch (error) {
 		console.error(error);
