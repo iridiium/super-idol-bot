@@ -6,7 +6,6 @@ const queue = new Map();
 module.exports = {
 	name: 'play',
 	aliases: ['skip', 'stop', 'queue'],
-	description: 'The main function for this music bot, contains play, skip, stop and queue, self-explanatory.',
 	async execute(message, args, cmd) {
 		const voice_channel = message.member.voice.channel;
 		if (!voice_channel) {
