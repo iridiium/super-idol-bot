@@ -10,6 +10,7 @@ module.exports = {
 				{ name: '//skip', value: 'Skips the song that is playing.' },
 				{ name: '//stop', value: 'Stops the song that is playing, empties the queue, and leaves the voice channel.' },
 				{ name: '//queue', value: 'Displays all songs in the queue.' },
+				{ name: '//leave', value: 'Stops the song, ends the queue and leaves the voice channel.' },
 			)
 			.setTimestamp()
 			.setFooter('Made by mcmakkers#9633');

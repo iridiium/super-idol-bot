@@ -43,7 +43,7 @@ bot.on('message', async message => {
 	if (!command) return;
 
 	try {
-		bot.commands.get(commandName).execute(message, args, commandName, Discord);
+		bot.commands.get(commandName).execute(message, args, commandName);
 	}
 	catch (error) {
 		console.error(error);

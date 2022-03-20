@@ -1,29 +1,31 @@
 const ytdl = require('ytdl-core');
 const yt_search = require('yt-search');
 
+const Discord = require('discord.js');
+
 const queue = new Map();
 
 module.exports = {
 	name: 'play',
 	aliases: ['skip', 'stop', 'queue', 'die', 'leave'],
-	async execute(message, args, cmd, Discord) {
+	async execute(message, args, cmd) {
 		if (!message.guild) {
 			return message.channel.send(error_embed(
-				'You cannot use this command in direct messages!', Discord,
+				'You cannot use this command in direct messages!',
 			));
 		}
 
 		const voice_channel = message.member.voice.channel;
 		if (!voice_channel) {
 			return message.channel.send(error_embed(
-				'You need to be in a voice channel to execute this command!', Discord,
+				'You need to be in a voice channel to execute this command!',
 			));
 		}
 
 		const permissions = message.member.voice.channel.permissionsFor(message.client.user);
 		if (!permissions.has('CONNECT') || !permissions.has('SPEAK')) {
 			return message.channel.send(error_embed(
-				'You don\'t have the correct permissions!', Discord,
+				'You don\'t have the correct permissions!',
 			));
 		}
 
@@ -32,7 +34,7 @@ module.exports = {
 		if (cmd == 'play') {
 			if (!args.length) {
 				return message.channel.send(error_embed(
-					'You need to send the second argument!', Discord,
+					'You need to send the second argument!',
 				));
 			}
 
@@ -65,7 +67,7 @@ module.exports = {
 				}
 				else {
 					return message.channel.send(error_embed(
-						'There was an error finding the specified video.', Discord,
+						'There was an error finding the specified video.',
 					));
 				}
 			}
@@ -83,44 +85,42 @@ module.exports = {
 
 				try {
 					const connection = await voice_channel.join();
+					console.log(connection);
 					queue_constructor.connection = connection;
-					video_player(message.guild, queue_constructor.songs[0], Discord);
+					video_player(message.guild, queue_constructor.songs[0]);
 				}
 				catch (err) {
 					queue.delete(message.guild.id);
 					return message.channel.send(error_embed(
-						'There was an error connecting!', Discord,
+						'There was an error connecting!',
 					));
 				}
 			}
 			else {
 				server_queue.songs.push(song);
 				return message.channel.send(success_embed(
-					`"${song.title}" added to queue!`, Discord,
+					`"${song.title}" added to queue!`,
 				));
 			}
 		}
 		else if (cmd === 'skip') {
-			skip_song(message, server_queue, Discord);
+			skip_song(message, server_queue);
 		}
 		else if (cmd === 'stop' || cmd === 'die') {
-			stop_song(message, server_queue, Discord);
+			stop_song(message, server_queue);
 		}
 		else if (cmd === 'queue') {
-			display_queue(message, server_queue, Discord);
+			display_queue(message, server_queue);
 		}
 		else if (cmd === 'leave') {
-			message.guild.me.voice.channel.leave();
-			return message.channel.send(success_embed(
-				'Leaving the voice channel!', Discord,
-			));
+			leave(message, server_queue);
 		}
 	},
 };
 
 // Helper function for the play command
 
-const video_player = async (guild, song, Discord) => {
+const video_player = async (guild, song) => {
 	const song_queue = queue.get(guild.id);
 
 	if (!song) {
@@ -135,42 +135,57 @@ const video_player = async (guild, song, Discord) => {
 		video_player(guild, song_queue.songs[0]);
 	});
 	song_queue.text_channel.send(success_embed(
-		`Now playing ${song.title} (${song.duration}) by ${song.author}`, Discord,
+		`Now playing ${song.title} (${song.duration}) by ${song.author}`,
 	));
 };
 
 // Other commands which require queue access
 
-const skip_song = (message, server_queue, Discord) => {
+const skip_song = async (message, server_queue) => {
+	console.log(server_queue);
 	if (!message.member.voice.channel) {
 		return message.channel.send(error_embed(
-			'You need to be in a voice channel to execute this command!', Discord,
+			'You need to be in a voice channel to execute this command!',
 		));
 	}
 	if (!server_queue) {
 		return message.channel.send(error_embed(
-			'There are no songs in the queue!', Discord,
+			'There are no songs in the queue!',
 		));
 	}
 	try {
-		server_queue.connection.dispatcher.end();
+		server_queue.songs.shift();
+		video_player(message.guild, server_queue.songs[0]);
+
+		const song_skipped = server_queue.songs[0];
+		try {
+			return message.channel.send(success_embed(
+				'Now playing:' + song_skipped.title,
+			));
+		}
+		catch (exc) {
+			return message.channel.send(success_embed(
+				'Stopping the song, ending the queue and leaving the voice channel.',
+			));
+		}
 	}
 	catch (exc) {
+		console.log(exc);
 		return message.channel.send(error_embed(
-			'The song you are trying to skip has no audio or is too short, so the bot cannot skip the song as it thinks that there is no song. This won\'t work with the stop command either.', Discord,
+			'An error happened.',
 		));
 	}
 };
 
-const stop_song = (message, server_queue, Discord) => {
+const stop_song = (message, server_queue) => {
 	if (!message.member.voice.channel) {
 		return message.channel.send(error_embed(
-			'You need to be in a channel to execute this command!', Discord,
+			'You need to be in a channel to execute this command!',
 		));
 	}
 	if (!server_queue) {
 		return message.channel.send(error_embed(
-			'There are no songs in the queue!', Discord,
+			'There are no songs in the queue!',
 		));
 	}
 
@@ -179,7 +194,7 @@ const stop_song = (message, server_queue, Discord) => {
 	}
 	catch (exc) {
 		return message.channel.send(error_embed(
-			'The song you are trying to skip has no audio or is too short, so the bot cannot skip the song as it thinks that there is no song. This won\'t work with the skip command either.', Discord,
+			'An error happened!',
 		));
 	}
 
@@ -187,14 +202,14 @@ const stop_song = (message, server_queue, Discord) => {
 	message.guild.me.voice.channel.leave();
 
 	message.channel.send(success_embed(
-		'Stopping the song, ending the queue and leaving the voice channel.', Discord,
+		'Stopping the song, ending the queue and leaving the voice channel.',
 	));
 };
 
-const display_queue = (message, server_queue, Discord) => {
+const display_queue = (message, server_queue) => {
 	if (!server_queue) {
 		return message.channel.send(error_embed(
-			'There are no songs in the queue!', Discord,
+			'There are no songs in the queue!',
 		));
 	}
 
@@ -213,14 +228,40 @@ Author: ${song.author}
 	}
 	catch (err) {
 		message.channel.send(error_embed(
-			'There are no songs in the queue!', Discord,
+			'There are no songs in the queue!',
 		));
 	}
 };
 
+const leave = (message, server_queue) => {
+	if (!message.member.voice.channel) {
+		return message.channel.send(error_embed(
+			'You need to be in a channel to execute this command!',
+		));
+	}
+
+	try {
+		server_queue.connection.dispatcher.end();
+	}
+	catch (exc) {
+		console.log(exc);
+		return message.channel.send(error_embed(
+			'There is no queue!',
+		));
+	}
+
+	server_queue.songs = [];
+	message.guild.me.voice.channel.leave();
+
+	message.channel.send(success_embed(
+		'Stopping the song, ending the queue and leaving the voice channel.',
+	));
+};
+
+
 // Embed functions
 
-const error_embed = (error, Discord) => {
+const error_embed = (error) => {
 	const embed = new Discord.MessageEmbed()
 		.setColor('#b00323')
 		.setTitle('An error has occured!')
@@ -231,7 +272,7 @@ const error_embed = (error, Discord) => {
 	return embed;
 };
 
-const success_embed = (success, Discord) => {
+const success_embed = (success) => {
 	const embed = new Discord.MessageEmbed()
 		.setColor('#f1c232')
 		.setTitle('Success!')
