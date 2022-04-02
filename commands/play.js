@@ -154,7 +154,7 @@ const skip_song = async (message, server_queue) => {
 	}
 	try {
 		const voice_channel = message.member.voice.channel;
-		const connection = await voice_channel.join();
+		await voice_channel.join();
 
 		server_queue.songs.shift();
 		video_player(message.guild, server_queue.songs[0]);
@@ -188,12 +188,11 @@ const stop_song = (message, server_queue) => {
 
 	try {
 		server_queue.connection.dispatcher.end();
+		queue.get(message.guild.id).songs = [];
 	}
 	catch (exc) {
 		console.log(exc);
 	}
-
-	queue.get(message.guild.id).songs = [];
 
 	try {
 		message.guild.me.voice.channel.leave();
@@ -218,18 +217,7 @@ const display_queue = (message, server_queue) => {
 	}
 
 	try {
-		const songs = [];
-		let index = 0;
-
-		server_queue.songs.forEach(function(song) {
-			index++;
-
-			songs.push(
-				`${index}: ${song.title} by ${song.author} (${song.duration}); ${song.url}`,
-			);
-		});
-
-		message.reply('```' + songs + '```');
+		message.channel.send({ embed: queue_embed(server_queue.songs) });
 	}
 	catch (err) {
 		message.channel.send(error_embed(
@@ -240,15 +228,49 @@ const display_queue = (message, server_queue) => {
 
 const join = async (message) => {
 	const voice_channel = message.member.voice.channel;
-	const connection = await voice_channel.join();
+	await voice_channel.join();
+
+	message.channel.send(success_embed(
+		'Voice channel joined!', 'Joined!',
+	));
 };
 
 
 // Embed functions
 
+const queue_embed = (arr) => {
+	const songs = [];
+	let index = 0;
+
+	arr.forEach(function(song) {
+		index++;
+
+		if (index < 11) {
+			songs.push(
+				{
+					name: index,
+					value: `${song.title} by ${song.author} (${song.duration}); ${song.url}`,
+				},
+			);
+		}
+	});
+
+	const embed = {
+		color: 0xf1c232,
+		title: 'Queue:',
+		fields: songs,
+		timestamp: new Date(),
+		footer: {
+			text: 'Made by mcmakkers#9633',
+		},
+	};
+
+	return embed;
+};
+
 const error_embed = (error) => {
 	const embed = new Discord.MessageEmbed()
-		.setColor('#b00323')
+		.setColor('b00323')
 		.setTitle('An error has occured!')
 		.setDescription(error)
 		.setTimestamp()

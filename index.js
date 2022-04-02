@@ -3,7 +3,11 @@ const fs = require('fs');
 
 const Discord = require('discord.js');
 
-const { PREFIX, token } = require('./config.json');
+const dotenv = require('dotenv');
+
+dotenv.config();
+
+const { PREFIX, activity } = require('./config.json');
 
 const bot = new Discord.Client();
 bot.commands = new Discord.Collection();
@@ -26,7 +30,7 @@ for (const file of commandFiles) {
 bot.on('ready', () => {
 	console.log('Status: Online');
 
-	bot.user.setActivity('music i think');
+	bot.user.setActivity(activity);
 });
 
 // - Commands
@@ -51,4 +55,4 @@ bot.on('message', async message => {
 	}
 });
 
-bot.login(token);
+bot.login(process.env.DISCORD_TOKEN);
