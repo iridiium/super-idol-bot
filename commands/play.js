@@ -1,3 +1,4 @@
+// Importing modules
 const ytdl = require('ytdl-core');
 const yt_search = require('yt-search');
 
@@ -5,43 +6,60 @@ const Discord = require('discord.js');
 
 const queue = new Map();
 
+// Module body
 module.exports = {
 	name: 'play',
-	aliases: ['skip', 'stop', 'queue', 'die', 'join'],
+
+	// All of the different commands that have code in this file
+	aliases: ['skip', 'stop', 'queue', 'die', 'leave', 'join', 'remove'],
+
 	async execute(message, args, cmd) {
+		// If the message is not being sent in a server i.e. direct messaged:
 		if (!message.guild) {
 			return message.channel.send(error_embed(
 				'You cannot use this command in direct messages!',
 			));
 		}
 
+		// Gets the voice channel that the bot is in
 		const voice_channel = message.member.voice.channel;
+
+		// If the bot is not connected to a voice channel:
 		if (!voice_channel) {
 			return message.channel.send(error_embed(
 				'You need to be in a voice channel to execute this command!',
 			));
 		}
 
+		// Gets permissions of the bot
 		const permissions = message.member.voice.channel.permissionsFor(message.client.user);
+		// If the bot cannot connect to a voice channel nor speak in a voice channel:
 		if (!permissions.has('CONNECT') || !permissions.has('SPEAK')) {
 			return message.channel.send(error_embed(
 				'You don\'t have the correct permissions!',
 			));
 		}
 
+		// From the map queue, gets the list of songs from the key of the id of the guild
 		const server_queue = queue.get(message.guild.id);
 
+		// conditional statement for each command
 		if (cmd == 'play') {
+			// If there was no song link/search term:
 			if (!args.length) {
 				return message.channel.send(error_embed(
 					'You need to send the second argument!',
 				));
 			}
 
+			// Defines new dictionary song that will store all the information for the
 			let song = {};
 
+			// If the link, which is the first element of args, is an URL:
 			if (ytdl.validateURL(args[0])) {
+				// song_info stores the information that ytdl has gotten from YouTube
 				const song_info = await ytdl.getInfo(args[0]);
+
 				song = { title: song_info.videoDetails.title,
 					url: song_info.videoDetails.video_url,
 					duration: song_info.videoDetails.duration,
@@ -49,20 +67,29 @@ module.exports = {
 				};
 			}
 			else {
+				// If the first argument was not a link:
 				const video_finder = async (query) => {
 					const video_result = await yt_search(query);
+
+					// If the length of the list of the videos fetched is more than 1
+					// (successful query), return the first result of the videos, otherwise return null
 					return (
 						video_result.videos.length > 1
 					) ? video_result.videos[0] : null;
 				};
 
+				// video is the result from running video_finder
+				// so either null or the first YouTube video
 				const video = await video_finder(args.join(' '));
+
+				// If the query was successful i.e. null was not reutrned from video_finder:
 				if (video) {
 					song = {
 						title: video.title,
 						url: video.url,
 						duration: video.duration,
 						author: video.author.name,
+						thumbnail: video.thumbnail,
 					};
 				}
 				else {
@@ -72,7 +99,10 @@ module.exports = {
 				}
 			}
 
+			// If there is no server_queue, or an empty server_queue:
 			if (!server_queue || server_queue.songs.length == 0) {
+				// The sample queue strcuture
+				// (voice channel of bot, text channel for bot to reply to, whether bot is connected, song list)
 				const queue_constructor = {
 					voice_channel: voice_channel,
 					text_channel: message.channel,
@@ -80,12 +110,18 @@ module.exports = {
 					songs: [],
 				};
 
+				// Add a new entry to the map queue with the server ID and queue constructor
 				queue.set(message.guild.id, queue_constructor);
+				// Add the queried song to the songs value in the queue constructor
 				queue_constructor.songs.push(song);
 
+				// Try to
 				try {
+					// Join a voice channel
 					const connection = await voice_channel.join();
+					// Get the connection info
 					queue_constructor.connection = connection;
+					// Plays a song in a server
 					video_player(message.guild, queue_constructor.songs[0]);
 				}
 				catch (err) {
@@ -96,6 +132,7 @@ module.exports = {
 				}
 			}
 			else {
+				// If the queue isn't empty, add this song to the server queue to be played next.
 				server_queue.songs.push(song);
 				return message.channel.send(success_embed(
 					`"${song.title}" added to queue!`, 'Song added to queue!',
@@ -105,7 +142,7 @@ module.exports = {
 		else if (cmd === 'skip') {
 			skip_song(message, server_queue);
 		}
-		else if (cmd === 'stop' || cmd === 'die') {
+		else if (cmd === 'stop' || cmd === 'die' || cmd === 'leave') {
 			stop_song(message, server_queue);
 		}
 		else if (cmd === 'queue') {
@@ -114,10 +151,13 @@ module.exports = {
 		else if (cmd === 'join') {
 			join(message, server_queue);
 		}
+		else if (cmd === 'remove') {
+			remove(message, server_queue, args);
+		}
 	},
 };
 
-// Helper function for the play command
+// Helper functions
 
 const video_player = async (guild, song) => {
 	const song_queue = queue.get(guild.id);
@@ -133,9 +173,8 @@ const video_player = async (guild, song) => {
 		song_queue.songs.shift();
 		video_player(guild, song_queue.songs[0]);
 	});
-	song_queue.text_channel.send(success_embed(
-		`Now playing: ${song.title} (${song.duration}) by ${song.author}`, 'Playing song!',
-	));
+
+	song_queue.text_channel.send(song_play_embed(song));
 };
 
 // Other commands which require queue access
@@ -217,7 +256,13 @@ const display_queue = (message, server_queue) => {
 	}
 
 	try {
-		message.channel.send({ embed: queue_embed(server_queue.songs) });
+		const queue_embed_value = queue_embed(server_queue.songs);
+		if (queue_embed_value.fields.length > 0) {
+			message.channel.send({ embed: queue_embed_value });
+		}
+		else {
+			throw 'All songs have already been removed from the queue.';
+		}
 	}
 	catch (err) {
 		message.channel.send(error_embed(
@@ -233,6 +278,24 @@ const join = async (message) => {
 	message.channel.send(success_embed(
 		'Voice channel joined!', 'Joined!',
 	));
+};
+
+const remove = (message, server_queue, args) => {
+	try {
+		const song_index = parseInt(args[0]) - 1;
+		const song = server_queue.songs[song_index].title;
+
+		delete server_queue.songs[song_index];
+
+		message.channel.send(remove_embed(
+			song,
+		));
+	}
+	catch (exc) {
+		message.channel.send(error_embed(
+			'Invalid song index!',
+		));
+	}
 };
 
 
@@ -256,7 +319,7 @@ const queue_embed = (arr) => {
 	});
 
 	const embed = {
-		color: 0xf1c232,
+		color: 0x748e54,
 		title: 'Queue:',
 		fields: songs,
 		timestamp: new Date(),
@@ -270,7 +333,7 @@ const queue_embed = (arr) => {
 
 const error_embed = (error) => {
 	const embed = new Discord.MessageEmbed()
-		.setColor('b00323')
+		.setColor('#cc2936')
 		.setTitle('An error has occured!')
 		.setDescription(error)
 		.setTimestamp()
@@ -281,9 +344,37 @@ const error_embed = (error) => {
 
 const success_embed = (success, title) => {
 	const embed = new Discord.MessageEmbed()
-		.setColor('#f1c232')
+		.setColor('#748e54')
 		.setTitle(title)
 		.setDescription(success)
+		.setTimestamp()
+		.setFooter('Made by mcmakkers#9633');
+
+	return embed;
+};
+
+const remove_embed = (song_name) => {
+	const embed = new Discord.MessageEmbed()
+		.setColor('#748e54')
+		.setTitle('Songs removed!')
+		.setDescription(song_name + ' has been removed from the queue.')
+		.setTimestamp()
+		.setFooter('Made by mcmakkers#9633');
+
+	return embed;
+};
+
+const song_play_embed = (song_info) => {
+	const embed = new Discord.MessageEmbed()
+		.setColor('#748e54')
+		.setTitle('Playing song!')
+		.addFields(
+			{ name: 'Song name:', value: song_info.title },
+			{ name: 'Song link:', value: song_info.url },
+			{ name: 'Song duration:', value: song_info.duration, inline: true },
+			{ name: 'YouTube channel:', value: song_info.author, inline: true },
+		)
+		.setImage(song_info.thumbnail)
 		.setTimestamp()
 		.setFooter('Made by mcmakkers#9633');
 
