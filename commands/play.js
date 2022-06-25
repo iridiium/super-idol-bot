@@ -230,7 +230,9 @@ const stop_song = (message, server_queue) => {
 		queue.get(message.guild.id).songs = [];
 	}
 	catch (exc) {
-		console.log(exc);
+		return message.channel.send(success_embed(
+			'Stopping the song and leaving the voice channel.', 'Songs stopped!',
+		));
 	}
 
 	try {
