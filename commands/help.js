@@ -13,6 +13,7 @@ module.exports = {
 				{ name: '//stop / //die / //leave', value: 'Stops the song that is playing, empties the queue, and leaves the voice channel.' },
 				{ name: '//queue', value: 'Displays the first 10 songs in the queue.' },
 				{ name: '//join', value: 'Makes the bot join the voice channel you are in.' },
+				{ name: '//remove', value: 'Removes the song  in the queue at the index specified.' },
 			)
 			.setTimestamp()
 			.setFooter('Made by mcmakkers#9633');
