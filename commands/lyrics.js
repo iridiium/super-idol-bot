@@ -66,13 +66,15 @@ const lyrics_embed = (raw) => {
 	let verses = [];	// eslint-disable-line prefer-const
 
 	lyrics.forEach(function(verse) {
-		const body = verse.slice(1, lyrics.length - 1);
-
 		verses.push({
 			name: verse[0],
-			value: body,
+			value: verse.slice(1, lyrics.length - 1),
 		});
 	});
+
+	if (!verses.value) {
+		return error_embed('Lyrics failed to display.');
+	}
 
 	const embed = {
 		color: 0x748e54,
