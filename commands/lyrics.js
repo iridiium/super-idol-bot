@@ -1,4 +1,4 @@
-const { getLyrics, getSong } = require('genius-lyrics-api');
+const { getLyrics } = require('genius-lyrics-api');
 const axios = require('axios');
 
 
@@ -24,10 +24,15 @@ module.exports = {
 		if (lyrics_url) {
 			const lyrics = await getLyrics(lyrics_url);
 
-			message.channel.send({ embed: lyrics_embed(lyrics) });
+			if (lyrics) {
+				return message.channel.send({ embed: lyrics_embed(lyrics) });
+			}
+			else {
+				return message.channel.send(error_embed('The requested song wasn\'t found.'));
+			}
 		}
 		else {
-			message.channel.send(error_embed('The requested song wasn\'t found.'));
+			return message.channel.send(error_embed('The requested song wasn\'t found.'));
 		}
 	},
 };
@@ -51,35 +56,34 @@ const lyrics_embed = (raw) => {
 	let lyrics = [];	// eslint-disable-line prefer-const
 
 	lines.forEach(function(line) {
+		// If the verse is a solo...
 		if (!line.includes('Solo]')) {
+
+			// If this line is the beginning of a verse, characterised by a [
 			if (line.charAt(0) == '[') {
-				lyrics.push([]);
+				lyrics.push({ name: line, value: [] });
+			}
+			// Otherwise add the line into the lyrics of the last verse
+			else {
+				lyrics[lyrics.length - 1].value.push(line);
 			}
 
-			lyrics[lyrics.length - 1].push(line);
 		}
+		// ...thre are no lyrics so we just put a -
 		else {
-			lyrics.push([line, '-']);
+			lyrics.push({ name: line, value: '-' });
 		}
 	});
 
-	let verses = [];	// eslint-disable-line prefer-const
-
-	lyrics.forEach(function(verse) {
-		verses.push({
-			name: verse[0],
-			value: verse.slice(1, lyrics.length - 1),
-		});
-	});
-
-	if (!verses.value) {
-		return error_embed('Lyrics failed to display.');
+	// 25 is the maximum number of fields an embed can have
+	if (lyrics.length > 25) {
+		return error_embed('Too many verses.');
 	}
 
 	const embed = {
 		color: 0x748e54,
 		title: 'Lyrics:',
-		fields: verses,
+		fields: lyrics,
 		timestamp: new Date(),
 		footer: {
 			text: 'Made by mcmakkers#9633',
